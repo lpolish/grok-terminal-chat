@@ -1,5 +1,14 @@
 #!/bin/bash
 
+# Enable error handling
+set -e
+
+# Debug information
+echo "Debug: Starting installation script"
+echo "Debug: Current directory: $(pwd)"
+echo "Debug: User: $USER"
+echo "Debug: Home directory: $HOME"
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
@@ -12,6 +21,18 @@ CONFIG_DIR="$HOME/.grok_chat"
 CONFIG_FILE="$CONFIG_DIR/config"
 API_KEY_HASH_FILE="$CONFIG_DIR/api_key_hash"
 API_KEY_FILE="$CONFIG_DIR/api_key"
+
+# Check for required commands
+echo "Debug: Checking for required commands"
+for cmd in curl sha256sum; do
+    if ! command -v $cmd &> /dev/null; then
+        echo -e "${RED}Error: Required command '$cmd' not found${NC}"
+        echo "Please install $cmd and try again"
+        exit 1
+    fi
+done
+
+echo "Debug: All required commands found"
 
 show_help() {
     echo -e "${BLUE}Grok Terminal Chat Installer${NC}"
@@ -59,6 +80,7 @@ setup_api_key() {
 }
 
 create_grok_script() {
+    echo "Debug: Creating Grok script"
     cat > "$TEMP_SCRIPT" << 'EOF'
 #!/bin/bash
 
@@ -67,11 +89,16 @@ TEMP_RESPONSE="/tmp/grok_response_$$"
 CONFIG_DIR="$HOME/.grok_chat"
 API_KEY_HASH_FILE="$CONFIG_DIR/api_key_hash"
 API_KEY_FILE="$CONFIG_DIR/api_key"
+API_ENDPOINT="https://api.grok.x.ai/v1/chat/completions"  # Grok API endpoint
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 NC='\033[0m'
+
+hash_api_key() {
+    echo -n "$1" | sha256sum | cut -d' ' -f1
+}
 
 show_help() {
     echo -e "${BLUE}Grok Terminal Chat${NC}"
@@ -144,9 +171,7 @@ uninstall() {
                 
                 echo
                 echo "Note: To complete uninstallation, you may want to:"
-                echo "1. Remove the PATH entry from ~/.bashrc:"
-                echo "   export PATH=\"\$HOME/.local/bin:\$PATH\""
-                echo "2. Run 'source ~/.bashrc' or restart your terminal"
+                echo "1. Run 'source ~/.bashrc' or restart your terminal"
             else
                 echo -e "${RED}Error: Failed to remove $SCRIPT_NAME${NC}"
                 exit 1
@@ -198,8 +223,57 @@ send_to_grok() {
     local message="$1"
     local api_key="$2"
     
-    echo "Grok: Processing your request: $message" > "$TEMP_RESPONSE"
+    if [ -z "$api_key" ]; then
+        echo -e "${RED}Error: API key is required${NC}" > "$TEMP_RESPONSE"
+        return 1
+    fi
     
+    # Prepare the API request
+    local request_data="{\"messages\":[{\"role\":\"user\",\"content\":\"$message\"}],\"model\":\"grok-1\",\"temperature\":0.7}"
+    
+    # Make the API request with timeout and better error handling
+    local response=$(curl -s -w "\n%{http_code}" "$API_ENDPOINT" \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer $api_key" \
+        -H "Accept: application/json" \
+        --max-time 30 \
+        --connect-timeout 10 \
+        -d "$request_data")
+    
+    local http_code=$(echo "$response" | tail -n1)
+    local response_body=$(echo "$response" | sed '$d')
+    
+    if [ "$http_code" -eq 200 ]; then
+        # Extract the response content from the JSON
+        local content=$(echo "$response_body" | grep -o '"content":"[^"]*"' | cut -d'"' -f4)
+        if [ -n "$content" ]; then
+            echo "Grok: $content" > "$TEMP_RESPONSE"
+        else
+            echo "Grok: I received a response but couldn't parse it properly." > "$TEMP_RESPONSE"
+            echo "Raw response: $response_body" >> "$TEMP_RESPONSE"
+        fi
+    else
+        case "$http_code" in
+            401)
+                echo "Grok: Authentication failed. Please check your API key." > "$TEMP_RESPONSE"
+                ;;
+            403)
+                echo "Grok: Access denied. Your API key may not have the necessary permissions." > "$TEMP_RESPONSE"
+                ;;
+            429)
+                echo "Grok: Rate limit exceeded. Please try again later." > "$TEMP_RESPONSE"
+                ;;
+            000)
+                echo "Grok: Connection failed. Please check your internet connection and try again." > "$TEMP_RESPONSE"
+                ;;
+            *)
+                echo "Grok: An error occurred (HTTP $http_code). Please try again later." > "$TEMP_RESPONSE"
+                echo "Error details: $response_body" >> "$TEMP_RESPONSE"
+                ;;
+        esac
+    fi
+    
+    # Handle command execution if requested
     if [[ "$message" =~ ^(execute|run):(.+)$ ]]; then
         local command="${BASH_REMATCH[2]}"
         if [[ "$command" =~ (rm|delete|mv|move|cp|copy) ]]; then
@@ -209,9 +283,6 @@ send_to_grok() {
             echo "Grok: Executing safe command: $command" >> "$TEMP_RESPONSE"
             echo "OUTPUT:$(eval "$command" 2>&1)" >> "$TEMP_RESPONSE"
         fi
-    else
-        echo "Grok: I understand: $message" >> "$TEMP_RESPONSE"
-        echo "Grok: How can I assist you further?" >> "$TEMP_RESPONSE"
     fi
 }
 
@@ -291,6 +362,7 @@ while true; do
     rm -f "$TEMP_RESPONSE"
 done
 EOF
+    echo "Debug: Grok script created at $TEMP_SCRIPT"
 }
 
 echo -e "${BLUE}Installing Grok Terminal Chat${NC}"
@@ -302,32 +374,39 @@ if [ ! -d "$INSTALL_DIR" ]; then
         echo -e "${RED}Error: Could not create $INSTALL_DIR${NC}"
         exit 1
     fi
+    echo "Debug: Created directory $INSTALL_DIR"
 fi
 
 if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
     echo -e "${BLUE}Adding $INSTALL_DIR to PATH in ~/.bashrc${NC}"
     echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bashrc"
     echo -e "${GREEN}Please run 'source ~/.bashrc' after installation or restart your terminal${NC}"
+    echo "Debug: Added $INSTALL_DIR to PATH in ~/.bashrc"
 fi
 
 create_grok_script
 
 echo -e "${BLUE}Installing $SCRIPT_NAME to $INSTALL_DIR${NC}"
+echo "Debug: Copying $TEMP_SCRIPT to $INSTALL_DIR/$SCRIPT_NAME"
 cp "$TEMP_SCRIPT" "$INSTALL_DIR/$SCRIPT_NAME"
 if [ $? -ne 0 ]; then
     echo -e "${RED}Error: Failed to copy script to $INSTALL_DIR${NC}"
+    echo "Debug: Copy failed from $TEMP_SCRIPT to $INSTALL_DIR/$SCRIPT_NAME"
     rm -f "$TEMP_SCRIPT"
     exit 1
 fi
 
+echo "Debug: Making $INSTALL_DIR/$SCRIPT_NAME executable"
 chmod +x "$INSTALL_DIR/$SCRIPT_NAME"
 if [ $? -ne 0 ]; then
     echo -e "${RED}Error: Failed to make script executable${NC}"
+    echo "Debug: chmod failed on $INSTALL_DIR/$SCRIPT_NAME"
     rm -f "$TEMP_SCRIPT"
     exit 1
 fi
 
 rm -f "$TEMP_SCRIPT"
+echo "Debug: Removed temporary script $TEMP_SCRIPT"
 
 echo -e "${GREEN}Installation completed successfully!${NC}"
 echo "1. Configure your API key (optional): $SCRIPT_NAME --setup"
@@ -336,3 +415,11 @@ echo "To uninstall, run: $SCRIPT_NAME --uninstall"
 echo "If it doesn't work immediately, try:"
 echo "  - Running 'source ~/.bashrc' or"
 echo "  - Opening a new terminal window"
+
+# Verify installation
+echo "Debug: Verifying installation"
+if [ -x "$INSTALL_DIR/$SCRIPT_NAME" ]; then
+    echo "Debug: Installation verified - $INSTALL_DIR/$SCRIPT_NAME exists and is executable"
+else
+    echo -e "${RED}Warning: Installation may have failed - $INSTALL_DIR/$SCRIPT_NAME is not executable${NC}"
+fi
