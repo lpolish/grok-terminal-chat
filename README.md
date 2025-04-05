@@ -14,6 +14,7 @@ maintaining conversation context and supporting command execution with safety co
 ## Installation
 
 ### Method 1: Direct Download and Install
+
 1. Download install.sh
 2. Make it executable:
    ```bash
@@ -29,11 +30,12 @@ maintaining conversation context and supporting command execution with safety co
    ```
 
 ### Method 2: Install via curl (Recommended)
-Assuming this is hosted on GitHub at https://github.com/username/repo/raw/main/install.sh:
+
 ```bash
 curl -fsSL https://github.com/lpolish/grok-terminal-chat/raw/main/install.sh | bash
 ```
 Then setup API key:
+
 ```bash
 install.sh --setup
 ```
@@ -57,6 +59,7 @@ Replace username/repo with your actual GitHub username and repository name.
 
 ## Uninstallation
 Run the installer with the uninstall option:
+
 ```bash
 install.sh --uninstall
 ```
