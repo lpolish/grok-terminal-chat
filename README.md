@@ -1,137 +1,136 @@
 # Grok Terminal Chat
 
-A command-line interface for interacting with the Grok AI model. This tool provides a simple and secure way to chat with Grok directly from your terminal.
+A command-line interface for interacting with Grok AI in your terminal. This tool allows you to chat with Grok and execute system commands through natural language.
 
 ## Features
 
-- Secure API key management
-- Persistent conversation context
-- Command execution capabilities
-- Clean and intuitive interface
+- Interactive chat interface with Grok AI
+- Command execution through natural language
+- Conversation context maintenance
+- Secure API key storage
 - Easy installation and uninstallation
+- Command history preservation
 
 ## Prerequisites
 
-- Bash shell
-- `curl` command-line tool
-- Internet connection
-- Grok API key (when available)
+- Python 3
+- pip3
+- A Grok API key from x.ai
+- curl (for direct installation)
 
 ## Installation
 
-### Method 1: Direct Download
-1. Clone this repository or download the `install.sh` script
-2. Make the script executable:
+### Method 1: Direct Installation (Recommended)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/lpolish/grok-terminal-chat/refs/heads/main/install.sh | bash
+```
+
+After installation:
+```bash
+grok --setup  # Configure your API key
+```
+
+### Method 2: Manual Installation
+
+1. Clone this repository:
    ```bash
-   chmod +x install.sh
+   git clone [repository-url]
+   cd grokbash
    ```
-3. Run the installer:
+
+2. Run the installer:
    ```bash
    ./install.sh
    ```
 
-### Method 2: Install via curl (Recommended)
-```bash
-# Download and execute in one step
-curl -fsSL https://raw.githubusercontent.com/lpolish/grok-terminal-chat/main/install.sh | bash
-
-# Or download first, then execute (if you prefer to inspect the script)
-curl -fsSL https://raw.githubusercontent.com/lpolish/grok-terminal-chat/main/install.sh -o install.sh
-chmod +x install.sh
-./install.sh
-```
+3. Configure your API key:
+   ```bash
+   grok --setup
+   ```
 
 The installer will:
-- Create necessary directories
-- Install the script to `~/.local/bin`
-- Add the directory to your PATH if needed
-- Set up secure permissions
+- Install required Python packages (openai)
+- Create necessary configuration directories
+- Install the `grok` command in `~/.local/bin`
+
+Make sure `~/.local/bin` is in your PATH. If it's not, add this to your `~/.bashrc`:
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
 
 ## Usage
 
 ### Basic Commands
 
-- Start the chat:
-  ```bash
-  grok
-  ```
+```bash
+grok              # Start the chat interface
+grok --help       # Show help message
+grok --setup      # Configure API key
+grok --rotate-key # Change API key
+grok --uninstall  # Remove the installation
+```
 
-- Configure API key:
-  ```bash
-  grok --setup
-  ```
+### In Chat Commands
 
-- Show help:
-  ```bash
-  grok --help
-  ```
-
-- Uninstall:
-  ```bash
-  grok --uninstall
-  ```
-
-### Chat Commands
-
-- Type your message and press Enter to chat
 - Type `exit` to quit
-- Type `clear` to reset the conversation context
-- Use `execute:` or `run:` prefix to execute commands (with safety checks)
+- Type `clear` to reset conversation context
+- Press `Ctrl+C` to exit at any time
 
-### API Key Management
+### Example Usage
 
-The API key is stored securely:
-- The actual key is stored in `~/.grok_chat/api_key`
-- A hash of the key is stored for verification
-- Both files have restricted permissions (600)
+```bash
+$ grok
+Welcome to Grok Terminal Chat
+Type 'exit' to quit, 'clear' to reset context
+Press Ctrl+C to exit at any time
 
-## Security Features
+You: list the files in the current directory
+Grok: I'll help you list the files in the current directory.
+EXECUTE: ls -l
 
-- API keys are stored with restricted permissions
-- Command execution requires confirmation
-- Potentially dangerous commands are flagged
-- Secure file permissions throughout
+Command output:
+[files will be listed here]
+```
 
-## File Locations
+## Configuration
 
-- Main script: `~/.local/bin/grok`
-- Configuration: `~/.grok_chat/`
-- Conversation context: `~/.grok_conversation_context`
+- API Key: Stored in `~/.grok_chat/api_key`
+- Conversation Context: Stored in `~/.grok_conversation_context`
+- Configuration Directory: `~/.grok_chat/`
+
+## Security
+
+- API key is stored with 600 permissions (user read/write only)
+- Configuration directory has 700 permissions (user access only)
+- All commands are shown before execution
+- Sensitive commands require explicit confirmation
 
 ## Uninstallation
 
-The uninstaller will:
-- Remove the main script
-- Optionally remove configuration files
-- Optionally remove conversation context
-- Provide instructions for PATH cleanup
+To remove Grok Terminal Chat completely:
+
+```bash
+grok --uninstall
+```
+
+This will:
+- Remove the `grok` command
+- Delete all configuration files
+- Remove the conversation history
 
 ## Troubleshooting
 
-1. If the command is not found:
-   ```bash
-   source ~/.bashrc
-   ```
+1. If `grok` command is not found:
+   - Ensure `~/.local/bin` is in your PATH
+   - Try running `source ~/.bashrc` or restart your terminal
 
-2. If API key issues occur:
-   ```bash
-   grok --setup
-   ```
+2. If you get "API key not configured":
+   - Run `grok --setup` to configure your API key
 
-3. For permission issues:
-   ```bash
-   chmod 600 ~/.grok_chat/api_key
-   chmod 600 ~/.grok_chat/api_key_hash
-   ```
+3. If Python packages are not found:
+   - Run `pip3 install --user openai` manually
 
 ## Contributing
 
 Feel free to submit issues and enhancement requests!
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Note
-
-This is a community project and is not officially affiliated with xAI or Grok. The API endpoint and authentication method may need to be updated once the official Grok API is released.
