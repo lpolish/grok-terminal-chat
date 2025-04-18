@@ -7,14 +7,69 @@ BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-CONFIG_DIR="$HOME/.grok_chat"
-INSTALL_DIR="$HOME/.local/bin"
+# System paths
+CONFIG_DIR="/etc/grok_chat"
+INSTALL_DIR="/usr/local/bin"
 SCRIPT_NAME="grok"
-CONTEXT_FILE="$HOME/.grok_conversation_context"
-API_KEY_FILE="$CONFIG_DIR/api_key"
+CONTEXT_DIR="/var/lib/grok"
+CONTEXT_FILE="${CONTEXT_DIR}/conversation_context"
+API_KEY_FILE="${CONFIG_DIR}/api_key"
+VENV_DIR="/opt/grok_venv"
+
+# Debug logging
+debug_log() {
+    echo -e "${BLUE}[DEBUG]${NC} $1" >&2
+}
+
+# Error handling
+fail() {
+    echo -e "${RED}[ERROR]${NC} $1" >&2
+    exit 1
+}
+
+# Safe directory creation
+safe_mkdir() {
+    local dir="$1"
+    local mode="${2:-755}"
+    
+    if [ -z "$dir" ]; then
+        fail "Directory path is empty"
+    fi
+    
+    debug_log "Creating directory: $dir"
+    mkdir -p "$dir" || fail "Failed to create directory: $dir"
+    chmod "$mode" "$dir" || fail "Failed to set permissions on: $dir"
+}
+
+install_system_deps() {
+    echo -e "${YELLOW}Installing system dependencies...${NC}"
+    
+    if [ -f /.dockerenv ]; then
+        debug_log "Container detected - setting non-interactive modes"
+        export DEBIAN_FRONTEND=noninteractive
+        export NEEDRESTART_MODE=a
+    fi
+
+    if ! command -v apt-get >/dev/null; then
+        fail "This script requires apt-get (Debian/Ubuntu)"
+    fi
+
+    debug_log "Updating package lists"
+    apt-get update -q || fail "Failed to update package lists"
+
+    debug_log "Installing core packages"
+    apt-get install -y --no-install-recommends \
+        python3 \
+        python3-pip \
+        python3-venv \
+        python3-full || fail "Failed to install system packages"
+}
 
 create_python_script() {
-    cat > "$CONFIG_DIR/chat.py" << 'EOF'
+    safe_mkdir "$CONFIG_DIR" 750
+    
+    debug_log "Creating Python chat script"
+    cat > "${CONFIG_DIR}/chat.py" << 'PYTHON_EOF'
 import os
 import sys
 import json
@@ -70,14 +125,12 @@ def chat(api_key, message, context_file):
                     output = execute_command(command)
                     content = f"{content}\n\nCommand output:\n{output}"
             
-            # Save the updated context
+            # Save updated context
             messages.append({"role": "assistant", "content": content})
             with open(context_file, 'w') as f:
-                json.dump(messages[1:], f)  # Skip system message when saving
+                json.dump(messages[1:], f)
             
             return content
-        except KeyboardInterrupt:
-            return "\nConversation interrupted. Goodbye!"
         except Exception as e:
             return f"Error: {str(e)}"
     except KeyboardInterrupt:
@@ -97,155 +150,207 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print("\nGoodbye!")
         sys.exit(0)
-EOF
+PYTHON_EOF
+
+    chmod 640 "${CONFIG_DIR}/chat.py"
 }
 
 create_grok_script() {
-    mkdir -p "$INSTALL_DIR"
-    cat > "$INSTALL_DIR/$SCRIPT_NAME" << 'EOF'
+    safe_mkdir "$INSTALL_DIR" 755
+    
+    debug_log "Creating main grok executable"
+    cat > "${INSTALL_DIR}/${SCRIPT_NAME}" << 'GROK_EOF'
 #!/bin/bash
 
+# Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-CONFIG_DIR="$HOME/.grok_chat"
-CONTEXT_FILE="$HOME/.grok_conversation_context"
+# Paths
+CONFIG_DIR="/etc/grok_chat"
+CONTEXT_FILE="/var/lib/grok/conversation_context"
 API_KEY_FILE="$CONFIG_DIR/api_key"
+VENV_DIR="/opt/grok_venv"
 
+# Activate virtual environment
+activate_venv() {
+    if [ -f "$VENV_DIR/bin/activate" ]; then
+        source "$VENV_DIR/bin/activate"
+    else
+        echo -e "${RED}Virtual environment missing at $VENV_DIR${NC}" >&2
+        exit 1
+    fi
+}
+
+# Dependency check
+check_dependencies() {
+    if [ ! -d "$VENV_DIR" ]; then
+        echo -e "${YELLOW}Setting up virtual environment...${NC}" >&2
+        python3 -m venv "$VENV_DIR" || {
+            echo -e "${RED}Failed to create virtual environment${NC}" >&2
+            exit 1
+        }
+        activate_venv
+        pip install --upgrade pip openai || {
+            echo -e "${RED}Failed to install Python packages${NC}" >&2
+            exit 1
+        }
+    else
+        activate_venv
+    fi
+}
+
+# Help message
 show_help() {
     echo -e "${BLUE}Grok Terminal Chat${NC}"
     echo "Usage: grok [OPTION]"
     echo
     echo "Options:"
-    echo "  --setup        Initialize or update API key"
-    echo "  --rotate-key   Change the API key"
-    echo "  --uninstall    Remove Grok Terminal Chat from the system"
-    echo "  --help         Display this help message"
-    echo
-    echo "Without options, the script will start the Grok chat interface"
+    echo "  --setup        Configure API key"
+    echo "  --rotate-key   Update API key"
+    echo "  --uninstall    Remove Grok"
+    echo "  --help         Show this help"
     echo
     echo "Examples:"
-    echo "  grok --setup     # Configure your API key"
-    echo "  grok             # Start the chat interface"
-    echo "  grok --uninstall # Remove the installation"
+    echo "  grok --setup"
+    echo "  grok"
 }
 
+# API key setup
 setup_api_key() {
     mkdir -p "$CONFIG_DIR"
     chmod 700 "$CONFIG_DIR"
     
     echo -e "${BLUE}API Key Setup${NC}"
-    echo "Enter your Grok API key (input will be hidden):"
+    echo -n "Enter your Grok API key (input hidden): "
     read -s api_key
     echo
     
     if [ -z "$api_key" ]; then
-        echo -e "${RED}Error: API key cannot be empty${NC}"
+        echo -e "${RED}Error: API key cannot be empty${NC}" >&2
         exit 1
     fi
     
     echo "$api_key" > "$API_KEY_FILE"
     chmod 600 "$API_KEY_FILE"
-    
-    echo -e "${GREEN}API key configured successfully${NC}"
-    echo "Note: The actual key is stored securely for future use."
+    echo -e "${GREEN}API key configured${NC}"
 }
 
+# Main command handling
 case "$1" in
-    "--help" | "-h")
+    "--help"|"-h")
         show_help
         exit 0
         ;;
-    "--setup" | "-s")
+    "--setup"|"-s")
         setup_api_key
         exit 0
         ;;
     "--rotate-key")
-        setup_api_key  # Reuse setup_api_key for key rotation
+        setup_api_key
         exit 0
         ;;
-    "--uninstall" | "-u")
-        echo -e "${RED}Uninstalling Grok Terminal Chat...${NC}"
-        read -p "Are you sure you want to uninstall? (y/n): " confirm
-        if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
-            rm -f "$INSTALL_DIR/$SCRIPT_NAME"
-            rm -rf "$CONFIG_DIR"
-            echo -e "${GREEN}Uninstallation complete${NC}"
+    "--uninstall"|"-u")
+        echo -e "${RED}Uninstalling...${NC}"
+        read -p "Confirm (y/n)? " confirm
+        if [[ "$confirm" =~ ^[Yy]$ ]]; then
+            rm -f "$(command -v grok)"
+            rm -rf "$CONFIG_DIR" "$VENV_DIR" "$(dirname "$CONTEXT_FILE")"
+            echo -e "${GREEN}Uninstalled${NC}"
         else
-            echo -e "${YELLOW}Uninstallation cancelled${NC}"
+            echo -e "${YELLOW}Cancelled${NC}"
         fi
         exit 0
         ;;
 esac
 
+# Verify API key
 if [ ! -f "$API_KEY_FILE" ]; then
-    echo -e "${RED}API key not configured. Please run 'grok --setup' first.${NC}"
+    echo -e "${RED}Run 'grok --setup' first${NC}" >&2
     exit 1
 fi
 
-api_key=$(cat "$API_KEY_FILE")
+# Check dependencies
+check_dependencies
 
+# Initialize context
 if [ ! -f "$CONTEXT_FILE" ]; then
+    mkdir -p "$(dirname "$CONTEXT_FILE")"
     echo "[]" > "$CONTEXT_FILE"
+    chmod 600 "$CONTEXT_FILE"
 fi
 
-echo -e "${GREEN}Welcome to Grok Terminal Chat${NC}"
+# Main chat loop
+echo -e "${GREEN}Grok Terminal Chat${NC}"
 echo "Type 'exit' to quit, 'clear' to reset context"
-echo "Press Ctrl+C to exit at any time"
-
-# Handle Ctrl+C gracefully
 trap 'echo -e "\n${GREEN}Goodbye!${NC}"; exit 0' INT
 
 while true; do
-    echo -e -n "${YELLOW}You: ${NC}"
+    echo -ne "${YELLOW}You: ${NC}"
     read -r input || { echo -e "\n${GREEN}Goodbye!${NC}"; exit 0; }
     
-    if [ "$input" = "exit" ]; then
-        echo -e "${GREEN}Goodbye!${NC}"
-        break
-    elif [ "$input" = "clear" ]; then
-        echo "[]" > "$CONTEXT_FILE"
-        echo "Context cleared"
-        continue
-    fi
-    
-    response=$(python3 "$CONFIG_DIR/chat.py" "$api_key" "$input" "$CONTEXT_FILE")
-    echo -e "${BLUE}Grok: ${NC}$response"
+    case "$input" in
+        exit) 
+            echo -e "${GREEN}Goodbye!${NC}"
+            exit 0
+            ;;
+        clear)
+            echo "[]" > "$CONTEXT_FILE"
+            echo "Context cleared"
+            continue
+            ;;
+        *)
+            response=$("$VENV_DIR/bin/python" "$CONFIG_DIR/chat.py" \
+                      "$(cat "$API_KEY_FILE")" "$input" "$CONTEXT_FILE")
+            echo -e "${BLUE}Grok: ${NC}$response"
+            ;;
+    esac
 done
-EOF
+GROK_EOF
 
-    chmod +x "$INSTALL_DIR/$SCRIPT_NAME"
+    chmod 755 "${INSTALL_DIR}/${SCRIPT_NAME}"
 }
 
-# Check for Python 3
-if ! command -v python3 &> /dev/null; then
-    echo -e "${RED}Python 3 is required but not installed.${NC}"
-    exit 1
+setup_virtualenv() {
+    safe_mkdir "$(dirname "$VENV_DIR")" 755
+    
+    debug_log "Creating Python virtual environment at ${VENV_DIR}"
+    python3 -m venv "${VENV_DIR}" || fail "Virtual environment creation failed"
+    
+    # Use absolute path to pip to avoid activation issues
+    "${VENV_DIR}/bin/pip" install --upgrade pip || fail "Pip upgrade failed"
+    "${VENV_DIR}/bin/pip" install openai || fail "OpenAI package installation failed"
+}
+
+main() {
+    echo -e "${GREEN}Starting installation...${NC}"
+    
+    [ "$(id -u)" -eq 0 ] || fail "Run as root (use sudo)"
+    
+    install_system_deps
+    command -v python3 >/dev/null || fail "Python 3 not found"
+    
+    safe_mkdir "$CONTEXT_DIR" 700
+    setup_virtualenv
+    create_python_script
+    create_grok_script
+    
+    echo -e "${GREEN}Installation complete!${NC}"
+    echo -e "Run ${YELLOW}grok --setup${NC} to configure"
+    echo -e "Then ${YELLOW}grok${NC} to start chatting"
+}
+
+# Pipe-to-bash handling with proper variable passing
+if [ ! -t 0 ]; then
+    exec bash -c "$(declare -f debug_log fail safe_mkdir install_system_deps \
+                   create_python_script create_grok_script setup_virtualenv main); \
+                   CONFIG_DIR=\"$CONFIG_DIR\" INSTALL_DIR=\"$INSTALL_DIR\" \
+                   SCRIPT_NAME=\"$SCRIPT_NAME\" CONTEXT_DIR=\"$CONTEXT_DIR\" \
+                   CONTEXT_FILE=\"$CONTEXT_FILE\" API_KEY_FILE=\"$API_KEY_FILE\" \
+                   VENV_DIR=\"$VENV_DIR\" main"
+else
+    main
 fi
-
-# Check for pip
-if ! command -v pip3 &> /dev/null; then
-    echo -e "${RED}pip3 is required but not installed.${NC}"
-    exit 1
-fi
-
-# Install openai package in user space
-echo -e "${BLUE}Installing required Python packages...${NC}"
-pip3 install --user openai
-
-echo -e "${BLUE}Creating configuration directory...${NC}"
-mkdir -p "$CONFIG_DIR"
-
-echo -e "${BLUE}Creating Python script...${NC}"
-create_python_script
-
-echo -e "${BLUE}Installing Grok script...${NC}"
-create_grok_script
-
-echo -e "${GREEN}Installation complete!${NC}"
-echo -e "Make sure $INSTALL_DIR is in your PATH"
-echo -e "Run ${YELLOW}grok --setup${NC} to configure your API key"
-echo -e "Then run ${YELLOW}grok${NC} to start chatting"
