@@ -12,6 +12,7 @@ INSTALL_DIR="$HOME/.local/bin"
 SCRIPT_NAME="grok"
 CONTEXT_FILE="$HOME/.grok_conversation_context"
 API_KEY_FILE="$CONFIG_DIR/api_key"
+REQUIREMENTS_FILE="$CONFIG_DIR/requirements.txt"
 
 create_python_script() {
     cat > "$CONFIG_DIR/chat.py" << 'EOF'
@@ -100,6 +101,12 @@ if __name__ == "__main__":
 EOF
 }
 
+create_requirements_file() {
+    cat > "$REQUIREMENTS_FILE" << 'EOF'
+openai>=1.0.0
+EOF
+}
+
 create_grok_script() {
     mkdir -p "$INSTALL_DIR"
     cat > "$INSTALL_DIR/$SCRIPT_NAME" << 'EOF'
@@ -114,6 +121,24 @@ NC='\033[0m'
 CONFIG_DIR="$HOME/.grok_chat"
 CONTEXT_FILE="$HOME/.grok_conversation_context"
 API_KEY_FILE="$CONFIG_DIR/api_key"
+REQUIREMENTS_FILE="$CONFIG_DIR/requirements.txt"
+
+check_dependencies() {
+    # Check if Python packages are installed
+    if ! python3 -c "import openai" &> /dev/null; then
+        echo -e "${YELLOW}Required Python packages not found. Installing...${NC}"
+        if [ -f "$REQUIREMENTS_FILE" ]; then
+            pip3 install --user -r "$REQUIREMENTS_FILE"
+            if [ $? -ne 0 ]; then
+                echo -e "${RED}Failed to install Python dependencies. Please check your Python/pip installation.${NC}"
+                exit 1
+            fi
+        else
+            echo -e "${RED}Requirements file not found at $REQUIREMENTS_FILE${NC}"
+            exit 1
+        fi
+    fi
+}
 
 show_help() {
     echo -e "${BLUE}Grok Terminal Chat${NC}"
@@ -173,6 +198,7 @@ case "$1" in
         if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
             rm -f "$INSTALL_DIR/$SCRIPT_NAME"
             rm -rf "$CONFIG_DIR"
+            rm -f "$CONTEXT_FILE"
             echo -e "${GREEN}Uninstallation complete${NC}"
         else
             echo -e "${YELLOW}Uninstallation cancelled${NC}"
@@ -185,6 +211,9 @@ if [ ! -f "$API_KEY_FILE" ]; then
     echo -e "${RED}API key not configured. Please run 'grok --setup' first.${NC}"
     exit 1
 fi
+
+# Check dependencies before proceeding
+check_dependencies
 
 api_key=$(cat "$API_KEY_FILE")
 
@@ -223,21 +252,35 @@ EOF
 # Check for Python 3
 if ! command -v python3 &> /dev/null; then
     echo -e "${RED}Python 3 is required but not installed.${NC}"
+    echo -e "Please install Python 3 and try again."
+    echo -e "On Ubuntu/Debian: ${YELLOW}sudo apt install python3 python3-pip${NC}"
+    echo -e "On RHEL/CentOS: ${YELLOW}sudo yum install python3 python3-pip${NC}"
+    echo -e "On macOS (using Homebrew): ${YELLOW}brew install python${NC}"
     exit 1
 fi
 
 # Check for pip
 if ! command -v pip3 &> /dev/null; then
     echo -e "${RED}pip3 is required but not installed.${NC}"
+    echo -e "Please install pip3 and try again."
+    echo -e "On Ubuntu/Debian: ${YELLOW}sudo apt install python3-pip${NC}"
+    echo -e "On RHEL/CentOS: ${YELLOW}sudo yum install python3-pip${NC}"
+    echo -e "On macOS (if Python is installed): ${YELLOW}python3 -m ensurepip --upgrade${NC}"
     exit 1
 fi
 
-# Install openai package in user space
-echo -e "${BLUE}Installing required Python packages...${NC}"
-pip3 install --user openai
-
 echo -e "${BLUE}Creating configuration directory...${NC}"
 mkdir -p "$CONFIG_DIR"
+
+echo -e "${BLUE}Creating requirements file...${NC}"
+create_requirements_file
+
+echo -e "${BLUE}Installing required Python packages...${NC}"
+pip3 install --user -r "$REQUIREMENTS_FILE"
+if [ $? -ne 0 ]; then
+    echo -e "${RED}Failed to install Python dependencies. Please check your Python/pip installation.${NC}"
+    exit 1
+fi
 
 echo -e "${BLUE}Creating Python script...${NC}"
 create_python_script
