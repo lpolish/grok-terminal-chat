@@ -1,136 +1,140 @@
-# Grok Terminal Chat
+Grok Terminal Chat
+A command-line interface for interacting with Grok AI in your terminal. Chat with Grok and execute system commands using natural language.
+Features
 
-A command-line interface for interacting with Grok AI in your terminal. This tool allows you to chat with Grok and execute system commands through natural language.
+Interactive chat with Grok AI
+Execute system commands via natural language
+Persistent conversation context
+Secure API key storage
+Easy installation and uninstallation
+Command history preservation
 
-## Features
+Supported Operating Systems
 
-- Interactive chat interface with Grok AI
-- Command execution through natural language
-- Conversation context maintenance
-- Secure API key storage
-- Easy installation and uninstallation
-- Command history preservation
+Debian-based (Ubuntu, Debian)
+Red Hat-based (Fedora, CentOS, RHEL, Amazon Linux 2/2023)
+Arch Linux
+openSUSE
+Alpine Linux
 
-## Prerequisites
+Prerequisites
 
-- Python 3
-- pip3
-- A Grok API key from x.ai
-- curl (for direct installation)
+Python 3.6 or higher
+pip3
+A Grok API key (obtain from xAI API)
+curl (for direct installation)
+sudo privileges for installation
 
-## Installation
+Installation
+Method 1: Direct Installation (Recommended)
+curl -fsSL https://raw.githubusercontent.com/lpolish/grok-terminal-chat/main/install.sh | sudo bash
 
-### Method 1: Direct Installation (Recommended)
+Then configure your API key:
+sudo grok --setup
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/lpolish/grok-terminal-chat/refs/heads/main/install.sh | bash
-```
+Method 2: Manual Installation
 
-After installation:
-```bash
-grok --setup  # Configure your API key
-```
+Clone the repository:
+git clone https://github.com/lpolish/grok-terminal-chat.git
+cd grok-terminal-chat
 
-### Method 2: Manual Installation
 
-1. Clone this repository:
-   ```bash
-   git clone [repository-url]
-   cd grokbash
-   ```
+Run the installer with sudo:
+sudo ./install.sh
 
-2. Run the installer:
-   ```bash
-   ./install.sh
-   ```
 
-3. Configure your API key:
-   ```bash
-   grok --setup
-   ```
+Configure your API key:
+sudo grok --setup
+
+
 
 The installer will:
-- Install required Python packages (openai)
-- Create necessary configuration directories
-- Install the `grok` command in `~/.local/bin`
 
-Make sure `~/.local/bin` is in your PATH. If it's not, add this to your `~/.bashrc`:
-```bash
-export PATH="$HOME/.local/bin:$PATH"
-```
+Install required system packages (Python, pip, virtualenv)
+Set up a Python virtual environment in /opt/grok_venv
+Install the grok command in /usr/local/bin
+Create configuration directories (/etc/grok_chat, /var/lib/grok)
 
-## Usage
-
-### Basic Commands
-
-```bash
+Usage
+Basic Commands
 grok              # Start the chat interface
 grok --help       # Show help message
 grok --setup      # Configure API key
-grok --rotate-key # Change API key
-grok --uninstall  # Remove the installation
-```
+grok --rotate-key # Update API key
+grok --uninstall  # Remove Grok
 
-### In Chat Commands
+In-Chat Commands
 
-- Type `exit` to quit
-- Type `clear` to reset conversation context
-- Press `Ctrl+C` to exit at any time
+exit: Quit the chat
+clear: Reset conversation context
+Ctrl+C: Exit immediately
 
-### Example Usage
-
-```bash
+Example
 $ grok
-Welcome to Grok Terminal Chat
+Grok Terminal Chat
 Type 'exit' to quit, 'clear' to reset context
-Press Ctrl+C to exit at any time
 
-You: list the files in the current directory
-Grok: I'll help you list the files in the current directory.
-EXECUTE: ls -l
-
+You: List files in the current directory
+Grok: EXECUTE: ls -l
 Command output:
-[files will be listed here]
-```
+total 8
+-rw-r--r-- 1 user user 1234 Apr 18 2025 file1.txt
+-rw-r--r-- 1 user user 5678 Apr 18 2025 file2.txt
 
-## Configuration
+Configuration
 
-- API Key: Stored in `~/.grok_chat/api_key`
-- Conversation Context: Stored in `~/.grok_conversation_context`
-- Configuration Directory: `~/.grok_chat/`
+API Key: Stored in /etc/grok_chat/api_key
+Conversation Context: Stored in /var/lib/grok/conversation_context
+Configuration Directory: /etc/grok_chat
 
-## Security
+Security
 
-- API key is stored with 600 permissions (user read/write only)
-- Configuration directory has 700 permissions (user access only)
-- All commands are shown before execution
-- Sensitive commands require explicit confirmation
+API key permissions: 600 (user read/write only)
+Configuration directory permissions: 700 (user access only)
+Commands are displayed before execution
+Sensitive commands require confirmation
 
-## Uninstallation
-
-To remove Grok Terminal Chat completely:
-
-```bash
-grok --uninstall
-```
+Uninstallation
+To remove Grok Terminal Chat:
+sudo grok --uninstall
 
 This will:
-- Remove the `grok` command
-- Delete all configuration files
-- Remove the conversation history
 
-## Troubleshooting
+Remove the grok command
+Delete configuration files and directories
+Remove the virtual environment
+Erase conversation history
 
-1. If `grok` command is not found:
-   - Ensure `~/.local/bin` is in your PATH
-   - Try running `source ~/.bashrc` or restart your terminal
+Troubleshooting
 
-2. If you get "API key not configured":
-   - Run `grok --setup` to configure your API key
+"grok: command not found":
 
-3. If Python packages are not found:
-   - Run `pip3 install --user openai` manually
+Ensure /usr/local/bin is in your PATH: export PATH=/usr/local/bin:$PATH
+Verify installation with ls /usr/local/bin/grok
 
-## Contributing
 
-Feel free to submit issues and enhancement requests!
+"API key not configured":
+
+Run sudo grok --setup to set your API key
+
+
+Package installation fails:
+
+Ensure internet connectivity
+For Alpine Linux, verify main and community repositories are enabled in /etc/apk/repositories
+Manually install Python: # Alpine: sudo apk add python3 py3-pip
+# Amazon Linux 2: sudo yum install python3 python3-pip
+
+
+
+
+Python package errors:
+
+Manually install the openai package: sudo /opt/grok_venv/bin/pip install openai
+
+
+
+Contributing
+Submit issues or pull requests at github.com/lpolish/grok-terminal-chat.
+License
+MIT License
