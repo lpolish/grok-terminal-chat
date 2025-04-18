@@ -159,7 +159,7 @@ create_grok_script() {
     safe_mkdir "$INSTALL_DIR" 755
     
     debug_log "Creating main grok executable"
-    cat > "${INSTALL_DIR}/${SCRIPT_NAME}" << 'BASH_EOF'
+    cat > "${INSTALL_DIR}/${SCRIPT_NAME}" << 'GROK_EOF'
 #!/bin/bash
 
 # Colors
@@ -309,7 +309,7 @@ while true; do
             ;;
     esac
 done
-BASH_EOF
+GROK_EOF
 
     chmod 755 "${INSTALL_DIR}/${SCRIPT_NAME}"
 }
