@@ -43,16 +43,20 @@ safe_mkdir() {
 
 # Detect package manager
 detect_package_manager() {
-    if command -v apt-get >/dev/null; then
+    if command -v apk >/dev/null; then
+        echo "apk"
+    elif command -v apt-get >/dev/null; then
         echo "apt"
-    elif command -v dnf >/dev/null || command -v yum >/dev/null; then
+    elif command -v dnf >/dev/null; then
         echo "dnf"
+    elif command -v yum >/dev/null; then
+        echo "yum"
     elif command -v pacman >/dev/null; then
         echo "pacman"
     elif command -v zypper >/dev/null; then
         echo "zypper"
     else
-        fail "No supported package manager found (apt, dnf/yum, pacman, or zypper)"
+        fail "No supported package manager found (apk, apt, dnf, yum, pacman, or zypper)"
     fi
 }
 
@@ -69,6 +73,16 @@ install_system_deps() {
     debug_log "Detected package manager: $PKG_MANAGER"
 
     case "$PKG_MANAGER" in
+        apk)
+            debug_log "Updating package lists (apk)"
+            apk update || fail "Failed to update package lists"
+            debug_log "Installing core packages (apk)"
+            apk add \
+                python3 \
+                py3-pip \
+                python3-dev \
+                musl-dev || fail "Failed to install system packages"
+            ;;
         apt)
             debug_log "Updating package lists (apt)"
             apt-get update -q || fail "Failed to update package lists"
@@ -84,6 +98,15 @@ install_system_deps() {
             dnf update -y -q || fail "Failed to update package lists"
             debug_log "Installing core packages (dnf)"
             dnf install -y \
+                python3 \
+                python3-pip \
+                python3-virtualenv || fail "Failed to install system packages"
+            ;;
+        yum)
+            debug_log "Updating package lists (yum)"
+            yum update -y -q || fail "Failed to update package lists"
+            debug_log "Installing core packages (yum)"
+            yum install -y \
                 python3 \
                 python3-pip \
                 python3-virtualenv || fail "Failed to install system packages"
