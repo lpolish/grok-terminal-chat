@@ -41,6 +41,21 @@ safe_mkdir() {
     chmod "$mode" "$dir" || fail "Failed to set permissions on: $dir"
 }
 
+# Detect package manager
+detect_package_manager() {
+    if command -v apt-get >/dev/null; then
+        echo "apt"
+    elif command -v dnf >/dev/null || command -v yum >/dev/null; then
+        echo "dnf"
+    elif command -v pacman >/dev/null; then
+        echo "pacman"
+    elif command -v zypper >/dev/null; then
+        echo "zypper"
+    else
+        fail "No supported package manager found (apt, dnf/yum, pacman, or zypper)"
+    fi
+}
+
 install_system_deps() {
     echo -e "${YELLOW}Installing system dependencies...${NC}"
     
@@ -50,19 +65,51 @@ install_system_deps() {
         export NEEDRESTART_MODE=a
     fi
 
-    if ! command -v apt-get >/dev/null; then
-        fail "This script requires apt-get (Debian/Ubuntu)"
-    fi
+    PKG_MANAGER=$(detect_package_manager)
+    debug_log "Detected package manager: $PKG_MANAGER"
 
-    debug_log "Updating package lists"
-    apt-get update -q || fail "Failed to update package lists"
-
-    debug_log "Installing core packages"
-    apt-get install -y --no-install-recommends \
-        python3 \
-        python3-pip \
-        python3-venv \
-        python3-full || fail "Failed to install system packages"
+    case "$PKG_MANAGER" in
+        apt)
+            debug_log "Updating package lists (apt)"
+            apt-get update -q || fail "Failed to update package lists"
+            debug_log "Installing core packages (apt)"
+            apt-get install -y --no-install-recommends \
+                python3 \
+                python3-pip \
+                python3-venv \
+                python3-full || fail "Failed to install system packages"
+            ;;
+        dnf)
+            debug_log "Updating package lists (dnf)"
+            dnf update -y -q || fail "Failed to update package lists"
+            debug_log "Installing core packages (dnf)"
+            dnf install -y \
+                python3 \
+                python3-pip \
+                python3-virtualenv || fail "Failed to install system packages"
+            ;;
+        pacman)
+            debug_log "Updating package lists (pacman)"
+            pacman -Syu --noconfirm || fail "Failed to update package lists"
+            debug_log "Installing core packages (pacman)"
+            pacman -S --noconfirm \
+                python \
+                python-pip \
+                python-virtualenv || fail "Failed to install system packages"
+            ;;
+        zypper)
+            debug_log "Updating package lists (zypper)"
+            zypper refresh || fail "Failed to update package lists"
+            debug_log "Installing core packages (zypper)"
+            zypper install -y \
+                python3 \
+                python3-pip \
+                python3-virtualenv || fail "Failed to install system packages"
+            ;;
+        *)
+            fail "Unsupported package manager"
+            ;;
+    esac
 }
 
 create_python_script() {
@@ -345,8 +392,9 @@ main() {
 
 # Pipe-to-bash handling with proper variable passing
 if [ ! -t 0 ]; then
-    exec bash -c "$(declare -f debug_log fail safe_mkdir install_system_deps \
-                   create_python_script create_grok_script setup_virtualenv main); \
+    exec bash -c "$(declare -f debug_log fail safe_mkdir detect_package_manager \
+                   install_system_deps create_python_script create_grok_script \
+                   setup_virtualenv main); \
                    CONFIG_DIR=\"$CONFIG_DIR\" INSTALL_DIR=\"$INSTALL_DIR\" \
                    SCRIPT_NAME=\"$SCRIPT_NAME\" CONTEXT_DIR=\"$CONTEXT_DIR\" \
                    CONTEXT_FILE=\"$CONTEXT_FILE\" API_KEY_FILE=\"$API_KEY_FILE\" \
