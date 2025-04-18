@@ -7,12 +7,38 @@ BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-CONFIG_DIR="$HOME/.grok_chat"
-INSTALL_DIR="$HOME/.local/bin"
+# System-wide installation paths
+CONFIG_DIR="/etc/grok_chat"
+INSTALL_DIR="/usr/local/bin"
 SCRIPT_NAME="grok"
-CONTEXT_FILE="$HOME/.grok_conversation_context"
+CONTEXT_FILE="/var/lib/grok/conversation_context"
 API_KEY_FILE="$CONFIG_DIR/api_key"
 REQUIREMENTS_FILE="$CONFIG_DIR/requirements.txt"
+
+# Function to install system dependencies
+install_system_deps() {
+    echo -e "${BLUE}Installing system dependencies...${NC}"
+    
+    if command -v apt-get &> /dev/null; then
+        # Debian/Ubuntu
+        apt-get update
+        apt-get install -y python3 python3-pip
+    elif command -v yum &> /dev/null; then
+        # RHEL/CentOS
+        yum install -y python3 python3-pip
+    elif command -v dnf &> /dev/null; then
+        # Fedora
+        dnf install -y python3 python3-pip
+    elif command -v pacman &> /dev/null; then
+        # Arch Linux
+        pacman -Sy --noconfirm python python-pip
+    elif command -v zypper &> /dev/null; then
+        # OpenSUSE
+        zypper install -y python3 python3-pip
+    else
+        echo -e "${YELLOW}Could not detect package manager. Attempting to continue...${NC}"
+    fi
+}
 
 create_python_script() {
     cat > "$CONFIG_DIR/chat.py" << 'EOF'
@@ -118,23 +144,18 @@ BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-CONFIG_DIR="$HOME/.grok_chat"
-CONTEXT_FILE="$HOME/.grok_conversation_context"
+CONFIG_DIR="/etc/grok_chat"
+CONTEXT_FILE="/var/lib/grok/conversation_context"
 API_KEY_FILE="$CONFIG_DIR/api_key"
 REQUIREMENTS_FILE="$CONFIG_DIR/requirements.txt"
 
 check_dependencies() {
-    # Check if Python packages are installed
+    # Check if Python packages are installed system-wide
     if ! python3 -c "import openai" &> /dev/null; then
-        echo -e "${YELLOW}Required Python packages not found. Installing...${NC}"
-        if [ -f "$REQUIREMENTS_FILE" ]; then
-            pip3 install --user -r "$REQUIREMENTS_FILE"
-            if [ $? -ne 0 ]; then
-                echo -e "${RED}Failed to install Python dependencies. Please check your Python/pip installation.${NC}"
-                exit 1
-            fi
-        else
-            echo -e "${RED}Requirements file not found at $REQUIREMENTS_FILE${NC}"
+        echo -e "${YELLOW}Required Python packages not found. Installing system-wide...${NC}"
+        pip3 install --no-cache-dir -r "$REQUIREMENTS_FILE"
+        if [ $? -ne 0 ]; then
+            echo -e "${RED}Failed to install Python dependencies.${NC}"
             exit 1
         fi
     fi
@@ -218,7 +239,9 @@ check_dependencies
 api_key=$(cat "$API_KEY_FILE")
 
 if [ ! -f "$CONTEXT_FILE" ]; then
+    mkdir -p "/var/lib/grok"
     echo "[]" > "$CONTEXT_FILE"
+    chmod 600 "$CONTEXT_FILE"
 fi
 
 echo -e "${GREEN}Welcome to Grok Terminal Chat${NC}"
@@ -249,36 +272,41 @@ EOF
     chmod +x "$INSTALL_DIR/$SCRIPT_NAME"
 }
 
-# Check for Python 3
+# Main installation process
+echo -e "${GREEN}Starting Grok Terminal Chat installation...${NC}"
+
+# Check if running as root
+if [ "$(id -u)" -ne 0 ]; then
+    echo -e "${RED}This installation requires root privileges. Please run with sudo.${NC}"
+    exit 1
+fi
+
+# Install system dependencies
+install_system_deps
+
+# Check for Python 3 after installation attempt
 if ! command -v python3 &> /dev/null; then
-    echo -e "${RED}Python 3 is required but not installed.${NC}"
-    echo -e "Please install Python 3 and try again."
-    echo -e "On Ubuntu/Debian: ${YELLOW}sudo apt install python3 python3-pip${NC}"
-    echo -e "On RHEL/CentOS: ${YELLOW}sudo yum install python3 python3-pip${NC}"
-    echo -e "On macOS (using Homebrew): ${YELLOW}brew install python${NC}"
+    echo -e "${RED}Failed to install Python 3. Please install it manually.${NC}"
     exit 1
 fi
 
-# Check for pip
+# Check for pip after installation attempt
 if ! command -v pip3 &> /dev/null; then
-    echo -e "${RED}pip3 is required but not installed.${NC}"
-    echo -e "Please install pip3 and try again."
-    echo -e "On Ubuntu/Debian: ${YELLOW}sudo apt install python3-pip${NC}"
-    echo -e "On RHEL/CentOS: ${YELLOW}sudo yum install python3-pip${NC}"
-    echo -e "On macOS (if Python is installed): ${YELLOW}python3 -m ensurepip --upgrade${NC}"
+    echo -e "${RED}Failed to install pip3. Please install it manually.${NC}"
     exit 1
 fi
 
-echo -e "${BLUE}Creating configuration directory...${NC}"
+echo -e "${BLUE}Creating configuration directories...${NC}"
 mkdir -p "$CONFIG_DIR"
+mkdir -p "/var/lib/grok"
 
 echo -e "${BLUE}Creating requirements file...${NC}"
 create_requirements_file
 
-echo -e "${BLUE}Installing required Python packages...${NC}"
-pip3 install --user -r "$REQUIREMENTS_FILE"
+echo -e "${BLUE}Installing Python packages system-wide...${NC}"
+pip3 install --no-cache-dir -r "$REQUIREMENTS_FILE"
 if [ $? -ne 0 ]; then
-    echo -e "${RED}Failed to install Python dependencies. Please check your Python/pip installation.${NC}"
+    echo -e "${RED}Failed to install Python dependencies.${NC}"
     exit 1
 fi
 
@@ -289,6 +317,5 @@ echo -e "${BLUE}Installing Grok script...${NC}"
 create_grok_script
 
 echo -e "${GREEN}Installation complete!${NC}"
-echo -e "Make sure $INSTALL_DIR is in your PATH"
-echo -e "Run ${YELLOW}grok --setup${NC} to configure your API key"
-echo -e "Then run ${YELLOW}grok${NC} to start chatting"
+echo -e "You can now run Grok Terminal Chat with: ${YELLOW}grok --setup${NC}"
+echo -e "Then start chatting with: ${YELLOW}grok${NC}"
