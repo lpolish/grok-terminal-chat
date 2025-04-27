@@ -16,6 +16,12 @@ CONTEXT_FILE="${CONTEXT_DIR}/conversation_context"
 API_KEY_FILE="${CONFIG_DIR}/api_key"
 VENV_DIR="${HOME}/.local/share/grok/venv"
 
+# GitHub repository information
+REPO_OWNER="lpolish"
+REPO_NAME="grok-terminal-chat"
+REPO_BRANCH="main"
+BASE_URL="https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/${REPO_BRANCH}"
+
 # Debug logging
 debug_log() {
     echo -e "${BLUE}[DEBUG]${NC} $1" >&2
@@ -41,101 +47,71 @@ safe_mkdir() {
     chmod "$mode" "$dir" || fail "Failed to set permissions on: $dir"
 }
 
-# Detect package manager
-detect_package_manager() {
-    if command -v apk >/dev/null; then
-        echo "apk"
-    elif command -v apt-get >/dev/null; then
-        echo "apt"
-    elif command -v dnf >/dev/null; then
-        echo "dnf"
-    elif command -v yum >/dev/null; then
-        echo "yum"
-    elif command -v pacman >/dev/null; then
-        echo "pacman"
-    elif command -v zypper >/dev/null; then
-        echo "zypper"
+# Download file from GitHub
+download_file() {
+    local url="$1"
+    local dest="$2"
+    local mode="${3:-644}"
+    
+    debug_log "Downloading $url to $dest"
+    if command -v curl >/dev/null 2>&1; then
+        curl -fsSL "$url" -o "$dest" || fail "Failed to download $url"
+    elif command -v wget >/dev/null 2>&1; then
+        wget -q "$url" -O "$dest" || fail "Failed to download $url"
     else
-        fail "No supported package manager found (apk, apt, dnf, yum, pacman, or zypper)"
+        fail "Neither curl nor wget is available. Please install one of them."
     fi
+    
+    chmod "$mode" "$dest" || fail "Failed to set permissions on $dest"
 }
 
-install_system_deps() {
-    echo -e "${YELLOW}Installing system dependencies...${NC}"
+# Check if Python is installed
+check_python() {
+    if command -v python3 >/dev/null 2>&1; then
+        PYTHON_CMD="python3"
+    elif command -v python >/dev/null 2>&1; then
+        PYTHON_CMD="python"
+    else
+        return 1
+    fi
     
-    if [ -f /.dockerenv ]; then
-        debug_log "Container detected - setting non-interactive modes"
-        export DEBIAN_FRONTEND=noninteractive
-        export NEEDRESTART_MODE=a
+    # Check Python version
+    if ! $PYTHON_CMD -c "import sys; exit(0) if sys.version_info >= (3, 6) else exit(1)"; then
+        return 1
+    fi
+    
+    return 0
+}
+
+# Install Python if not present
+install_python() {
+    if check_python; then
+        debug_log "Python is already installed"
+        return 0
     fi
 
-    PKG_MANAGER=$(detect_package_manager)
-    debug_log "Detected package manager: $PKG_MANAGER"
-
-    # Check if we have sudo access
-    HAS_SUDO=0
-    if command -v sudo >/dev/null && sudo -n true 2>/dev/null; then
-        HAS_SUDO=1
+    echo -e "${YELLOW}Installing Python...${NC}"
+    
+    if command -v apt-get >/dev/null 2>&1; then
+        sudo apt-get update
+        sudo apt-get install -y python3 python3-pip python3-venv
+    elif command -v yum >/dev/null 2>&1; then
+        sudo yum install -y python3 python3-pip
+    elif command -v dnf >/dev/null 2>&1; then
+        sudo dnf install -y python3 python3-pip
+    elif command -v pacman >/dev/null 2>&1; then
+        sudo pacman -S --noconfirm python python-pip
+    elif command -v apk >/dev/null 2>&1; then
+        sudo apk add python3 py3-pip
+    elif command -v zypper >/dev/null 2>&1; then
+        sudo zypper install -y python3 python3-pip
+    else
+        fail "Could not install Python automatically. Please install Python 3.6+ manually."
     fi
 
-    # Function to install Python using package manager or alternative methods
-    install_python() {
-        case "$PKG_MANAGER" in
-            apk)
-                if [ $HAS_SUDO -eq 1 ]; then
-                    sudo apk add python3 py3-pip python3-dev musl-dev
-                else
-                    debug_log "No sudo access. Please ensure Python 3 and pip are installed"
-                    command -v python3 >/dev/null || fail "Python 3 not found"
-                    command -v pip3 >/dev/null || fail "pip3 not found"
-                fi
-                ;;
-            apt)
-                if [ $HAS_SUDO -eq 1 ]; then
-                    sudo apt-get update -q
-                    sudo apt-get install -y --no-install-recommends python3 python3-pip python3-venv python3-full
-                else
-                    debug_log "No sudo access. Please ensure Python 3 and pip are installed"
-                    command -v python3 >/dev/null || fail "Python 3 not found"
-                    command -v pip3 >/dev/null || fail "pip3 not found"
-                fi
-                ;;
-            dnf|yum)
-                if [ $HAS_SUDO -eq 1 ]; then
-                    sudo $PKG_MANAGER install -y python3 python3-pip python3-virtualenv
-                else
-                    debug_log "No sudo access. Please ensure Python 3 and pip are installed"
-                    command -v python3 >/dev/null || fail "Python 3 not found"
-                    command -v pip3 >/dev/null || fail "pip3 not found"
-                fi
-                ;;
-            pacman)
-                if [ $HAS_SUDO -eq 1 ]; then
-                    sudo pacman -S --noconfirm python python-pip python-virtualenv
-                else
-                    debug_log "No sudo access. Please ensure Python 3 and pip are installed"
-                    command -v python3 >/dev/null || fail "Python 3 not found"
-                    command -v pip3 >/dev/null || fail "pip3 not found"
-                fi
-                ;;
-            zypper)
-                if [ $HAS_SUDO -eq 1 ]; then
-                    sudo zypper install -y python3 python3-pip python3-virtualenv
-                else
-                    debug_log "No sudo access. Please ensure Python 3 and pip are installed"
-                    command -v python3 >/dev/null || fail "Python 3 not found"
-                    command -v pip3 >/dev/null || fail "pip3 not found"
-                fi
-                ;;
-            *)
-                debug_log "No supported package manager found. Please ensure Python 3 and pip are installed"
-                command -v python3 >/dev/null || fail "Python 3 not found"
-                command -v pip3 >/dev/null || fail "pip3 not found"
-                ;;
-        esac
-    }
-
-    install_python
+    if ! check_python; then
+        fail "Python installation failed. Please install Python 3.6+ manually."
+    fi
 }
 
 # Ensure ~/.local/bin is in PATH
@@ -148,30 +124,12 @@ ensure_local_bin_in_path() {
 
 create_python_script() {
     safe_mkdir "$CONFIG_DIR" 750
-    
-    debug_log "Copying Python chat script"
-    # Get the directory where the install script is located
-    local script_dir
-    script_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-    
-    # Copy the chat.py script from the source directory
-    cp "${script_dir}/chat.py" "${CONFIG_DIR}/chat.py" || fail "Failed to copy chat.py"
-
-    chmod 640 "${CONFIG_DIR}/chat.py"
+    download_file "${BASE_URL}/chat.py" "${CONFIG_DIR}/chat.py" 640
 }
 
 create_grok_script() {
     safe_mkdir "$INSTALL_DIR" 755
-    
-    debug_log "Copying main grok executable"
-    # Get the directory where the install script is located
-    local script_dir
-    script_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-
-    # Copy the grok.sh script from the source directory
-    cp "${script_dir}/grok.sh" "${INSTALL_DIR}/${SCRIPT_NAME}" || fail "Failed to copy grok.sh"
-
-    chmod 755 "${INSTALL_DIR}/${SCRIPT_NAME}"
+    download_file "${BASE_URL}/grok.sh" "${INSTALL_DIR}/${SCRIPT_NAME}" 755
 }
 
 setup_virtualenv() {
@@ -180,18 +138,17 @@ setup_virtualenv() {
     debug_log "Creating Python virtual environment at ${VENV_DIR}"
     python3 -m venv "${VENV_DIR}" || fail "Virtual environment creation failed"
     
-    # Use absolute path to pip to avoid activation issues
-    "${VENV_DIR}/bin/pip" install --upgrade pip || fail "Pip upgrade failed"
-    "${VENV_DIR}/bin/pip" install openai || fail "OpenAI package installation failed"
+    # Activate virtual environment and install dependencies
+    source "${VENV_DIR}/bin/activate" || fail "Failed to activate virtual environment"
+    pip install --upgrade pip || fail "Pip upgrade failed"
+    pip install openai || fail "OpenAI package installation failed"
+    deactivate
 }
 
 main() {
     echo -e "${GREEN}Starting installation...${NC}"
     
-    install_system_deps
-    command -v python3 >/dev/null || fail "Python 3 not found"
-    
-    # Ensure ~/.local/bin exists and is in PATH
+    install_python
     ensure_local_bin_in_path
     
     safe_mkdir "$CONTEXT_DIR" 700
@@ -208,13 +165,15 @@ main() {
 
 # Pipe-to-bash handling with proper variable passing
 if [ ! -t 0 ]; then
-    exec bash -c "$(declare -f debug_log fail safe_mkdir detect_package_manager \
-                   install_system_deps create_python_script create_grok_script \
+    exec bash -c "$(declare -f debug_log fail safe_mkdir download_file check_python install_python \
+                   ensure_local_bin_in_path create_python_script create_grok_script \
                    setup_virtualenv main); \
                    CONFIG_DIR=\"$CONFIG_DIR\" INSTALL_DIR=\"$INSTALL_DIR\" \
                    SCRIPT_NAME=\"$SCRIPT_NAME\" CONTEXT_DIR=\"$CONTEXT_DIR\" \
                    CONTEXT_FILE=\"$CONTEXT_FILE\" API_KEY_FILE=\"$API_KEY_FILE\" \
-                   VENV_DIR=\"$VENV_DIR\" main"
+                   VENV_DIR=\"$VENV_DIR\" REPO_OWNER=\"$REPO_OWNER\" \
+                   REPO_NAME=\"$REPO_NAME\" REPO_BRANCH=\"$REPO_BRANCH\" \
+                   BASE_URL=\"$BASE_URL\" main"
 else
     main
 fi
