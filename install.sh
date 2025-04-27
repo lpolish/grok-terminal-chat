@@ -291,21 +291,23 @@ show_help() {
 
 # API key setup
 setup_api_key() {
-    mkdir -p "$CONFIG_DIR"
-    chmod 700 "$CONFIG_DIR"
-    
+    # Ensure the configuration directory exists with proper permissions
+    sudo mkdir -p "$CONFIG_DIR"
+    sudo chmod 700 "$CONFIG_DIR"
+
     echo -e "${BLUE}API Key Setup${NC}"
     echo -n "Enter your Grok API key (input hidden): "
     read -s api_key
     echo
-    
+
     if [ -z "$api_key" ]; then
         echo -e "${RED}Error: API key cannot be empty${NC}" >&2
         exit 1
     fi
-    
-    echo "$api_key" > "$API_KEY_FILE"
-    chmod 600 "$API_KEY_FILE"
+
+    # Write the API key to the file using sudo
+    echo "$api_key" | sudo tee "$API_KEY_FILE" > /dev/null
+    sudo chmod 600 "$API_KEY_FILE"
     echo -e "${GREEN}API key configured${NC}"
 }
 
