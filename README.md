@@ -10,6 +10,7 @@ A command-line interface for interacting with Grok AI in your terminal. Chat wit
 - Secure API key storage
 - Easy installation and uninstallation
 - Command history preservation
+- No root access required
 
 ## Supported Operating Systems
 
@@ -25,19 +26,18 @@ A command-line interface for interacting with Grok AI in your terminal. Chat wit
 - pip3
 - A Grok API key (obtain from [xAI API](https://x.ai/api))
 - curl (for direct installation)
-- sudo privileges for installation
 
 ## Installation
 
 ### Method 1: Direct Installation (Recommended)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/lpolish/grok-terminal-chat/main/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/lpolish/grok-terminal-chat/main/install.sh | bash
 ```
 
 Then configure your API key:
 ```bash
-sudo grok --setup
+grok --setup
 ```
 
 ### Method 2: Manual Installation
@@ -48,21 +48,21 @@ sudo grok --setup
    cd grok-terminal-chat
    ```
 
-2. Run the installer with sudo:
+2. Run the installer:
    ```bash
-   sudo ./install.sh
+   ./install.sh
    ```
 
 3. Configure your API key:
    ```bash
-   sudo grok --setup
+   grok --setup
    ```
 
 The installer will:
-- Install required system packages (Python, pip, virtualenv)
-- Set up a Python virtual environment in `/opt/grok_venv`
-- Install the `grok` command in `/usr/local/bin`
-- Create configuration directories (`/etc/grok_chat`, `/var/lib/grok`)
+- Set up Python if not already installed (may require sudo if Python is not present)
+- Create a Python virtual environment in `~/.local/share/grok/venv`
+- Install the `grok` command in `~/.local/bin`
+- Create configuration directories in `~/.config/grok_chat` and `~/.local/share/grok`
 
 ## Usage
 
@@ -99,9 +99,9 @@ total 8
 
 ## Configuration
 
-- **API Key**: Stored in `/etc/grok_chat/api_key`
-- **Conversation Context**: Stored in `/var/lib/grok/conversation_context`
-- **Configuration Directory**: `/etc/grok_chat`
+- **API Key**: Stored in `~/.config/grok_chat/api_key`
+- **Conversation Context**: Stored in `~/.local/share/grok/conversation_context`
+- **Configuration Directory**: `~/.config/grok_chat`
 
 ## Security
 
@@ -109,13 +109,14 @@ total 8
 - Configuration directory permissions: 700 (user access only)
 - Commands are displayed before execution
 - Sensitive commands require confirmation
+- All files are stored in user-specific directories
 
 ## Uninstallation
 
 To remove Grok Terminal Chat:
 
 ```bash
-sudo grok --uninstall
+grok --uninstall
 ```
 
 This will:
@@ -127,23 +128,21 @@ This will:
 ## Troubleshooting
 
 - **"grok: command not found"**:
-  - Ensure `/usr/local/bin` is in your PATH: `export PATH=/usr/local/bin:$PATH`
-  - Verify installation with `ls /usr/local/bin/grok`
+  - Ensure `~/.local/bin` is in your PATH
+  - Log out and log back in, or run: `export PATH="$HOME/.local/bin:$PATH"`
+  - Verify installation with `ls ~/.local/bin/grok`
 
 - **"API key not configured"**:
-  - Run `sudo grok --setup` to set your API key
+  - Run `grok --setup` to set your API key
 
-- **Package installation fails**:
-  - Ensure internet connectivity
-  - For Alpine Linux, verify `main` and `community` repositories are enabled in `/etc/apk/repositories`
-  - Manually install Python: 
-    ```bash
-    # Alpine: sudo apk add python3 py3-pip
-    # Amazon Linux 2: sudo yum install python3 python3-pip
-    ```
+- **Python not found**:
+  - Install Python through your system's package manager
+  - For most systems: `sudo apt install python3` (Ubuntu/Debian)
+  - For Alpine: `sudo apk add python3`
+  - For RHEL/CentOS: `sudo yum install python3`
 
 - **Python package errors**:
-  - Manually install the `openai` package: `sudo /opt/grok_venv/bin/pip install openai`
+  - Manually install the `openai` package: `~/.local/share/grok/venv/bin/pip install openai`
 
 ## Contributing
 

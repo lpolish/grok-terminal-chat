@@ -8,13 +8,13 @@ YELLOW='\033[1;33m'
 NC='\033[0m'
 
 # System paths
-CONFIG_DIR="/etc/grok_chat"
-INSTALL_DIR="/usr/local/bin"
+CONFIG_DIR="${HOME}/.config/grok_chat"
+INSTALL_DIR="${HOME}/.local/bin"
 SCRIPT_NAME="grok"
-CONTEXT_DIR="/var/lib/grok"
+CONTEXT_DIR="${HOME}/.local/share/grok"
 CONTEXT_FILE="${CONTEXT_DIR}/conversation_context"
 API_KEY_FILE="${CONFIG_DIR}/api_key"
-VENV_DIR="/opt/grok_venv"
+VENV_DIR="${HOME}/.local/share/grok/venv"
 
 # Debug logging
 debug_log() {
@@ -72,67 +72,78 @@ install_system_deps() {
     PKG_MANAGER=$(detect_package_manager)
     debug_log "Detected package manager: $PKG_MANAGER"
 
-    case "$PKG_MANAGER" in
-        apk)
-            debug_log "Updating package lists (apk)"
-            apk update || fail "Failed to update package lists"
-            debug_log "Installing core packages (apk)"
-            apk add \
-                python3 \
-                py3-pip \
-                python3-dev \
-                musl-dev || fail "Failed to install system packages"
-            ;;
-        apt)
-            debug_log "Updating package lists (apt)"
-            apt-get update -q || fail "Failed to update package lists"
-            debug_log "Installing core packages (apt)"
-            apt-get install -y --no-install-recommends \
-                python3 \
-                python3-pip \
-                python3-venv \
-                python3-full || fail "Failed to install system packages"
-            ;;
-        dnf)
-            debug_log "Updating package lists (dnf)"
-            dnf update -y -q || fail "Failed to update package lists"
-            debug_log "Installing core packages (dnf)"
-            dnf install -y \
-                python3 \
-                python3-pip \
-                python3-virtualenv || fail "Failed to install system packages"
-            ;;
-        yum)
-            debug_log "Updating package lists (yum)"
-            yum update -y -q || fail "Failed to update package lists"
-            debug_log "Installing core packages (yum)"
-            yum install -y \
-                python3 \
-                python3-pip \
-                python3-virtualenv || fail "Failed to install system packages"
-            ;;
-        pacman)
-            debug_log "Updating package lists (pacman)"
-            pacman -Syu --noconfirm || fail "Failed to update package lists"
-            debug_log "Installing core packages (pacman)"
-            pacman -S --noconfirm \
-                python \
-                python-pip \
-                python-virtualenv || fail "Failed to install system packages"
-            ;;
-        zypper)
-            debug_log "Updating package lists (zypper)"
-            zypper refresh || fail "Failed to update package lists"
-            debug_log "Installing core packages (zypper)"
-            zypper install -y \
-                python3 \
-                python3-pip \
-                python3-virtualenv || fail "Failed to install system packages"
-            ;;
-        *)
-            fail "Unsupported package manager"
-            ;;
-    esac
+    # Check if we have sudo access
+    HAS_SUDO=0
+    if command -v sudo >/dev/null && sudo -n true 2>/dev/null; then
+        HAS_SUDO=1
+    fi
+
+    # Function to install Python using package manager or alternative methods
+    install_python() {
+        case "$PKG_MANAGER" in
+            apk)
+                if [ $HAS_SUDO -eq 1 ]; then
+                    sudo apk add python3 py3-pip python3-dev musl-dev
+                else
+                    debug_log "No sudo access. Please ensure Python 3 and pip are installed"
+                    command -v python3 >/dev/null || fail "Python 3 not found"
+                    command -v pip3 >/dev/null || fail "pip3 not found"
+                fi
+                ;;
+            apt)
+                if [ $HAS_SUDO -eq 1 ]; then
+                    sudo apt-get update -q
+                    sudo apt-get install -y --no-install-recommends python3 python3-pip python3-venv python3-full
+                else
+                    debug_log "No sudo access. Please ensure Python 3 and pip are installed"
+                    command -v python3 >/dev/null || fail "Python 3 not found"
+                    command -v pip3 >/dev/null || fail "pip3 not found"
+                fi
+                ;;
+            dnf|yum)
+                if [ $HAS_SUDO -eq 1 ]; then
+                    sudo $PKG_MANAGER install -y python3 python3-pip python3-virtualenv
+                else
+                    debug_log "No sudo access. Please ensure Python 3 and pip are installed"
+                    command -v python3 >/dev/null || fail "Python 3 not found"
+                    command -v pip3 >/dev/null || fail "pip3 not found"
+                fi
+                ;;
+            pacman)
+                if [ $HAS_SUDO -eq 1 ]; then
+                    sudo pacman -S --noconfirm python python-pip python-virtualenv
+                else
+                    debug_log "No sudo access. Please ensure Python 3 and pip are installed"
+                    command -v python3 >/dev/null || fail "Python 3 not found"
+                    command -v pip3 >/dev/null || fail "pip3 not found"
+                fi
+                ;;
+            zypper)
+                if [ $HAS_SUDO -eq 1 ]; then
+                    sudo zypper install -y python3 python3-pip python3-virtualenv
+                else
+                    debug_log "No sudo access. Please ensure Python 3 and pip are installed"
+                    command -v python3 >/dev/null || fail "Python 3 not found"
+                    command -v pip3 >/dev/null || fail "pip3 not found"
+                fi
+                ;;
+            *)
+                debug_log "No supported package manager found. Please ensure Python 3 and pip are installed"
+                command -v python3 >/dev/null || fail "Python 3 not found"
+                command -v pip3 >/dev/null || fail "pip3 not found"
+                ;;
+        esac
+    }
+
+    install_python
+}
+
+# Ensure ~/.local/bin is in PATH
+ensure_local_bin_in_path() {
+    if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+        echo "export PATH=\"\$HOME/.local/bin:\$PATH\"" >> "$HOME/.bashrc"
+        export PATH="$HOME/.local/bin:$PATH"
+    fi
 }
 
 create_python_script() {
@@ -239,11 +250,12 @@ BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-# Paths
-CONFIG_DIR="/etc/grok_chat"
-CONTEXT_FILE="/var/lib/grok/conversation_context"
-API_KEY_FILE="$CONFIG_DIR/api_key"
-VENV_DIR="/opt/grok_venv"
+# Paths - using user-specific locations
+CONFIG_DIR="${HOME}/.config/grok_chat"
+CONTEXT_DIR="${HOME}/.local/share/grok"
+CONTEXT_FILE="${CONTEXT_DIR}/conversation_context"
+API_KEY_FILE="${CONFIG_DIR}/api_key"
+VENV_DIR="${HOME}/.local/share/grok/venv"
 
 # Activate virtual environment
 activate_venv() {
@@ -291,9 +303,8 @@ show_help() {
 
 # API key setup
 setup_api_key() {
-    # Ensure the configuration directory exists with proper permissions
-    sudo mkdir -p "$CONFIG_DIR"
-    sudo chmod 700 "$CONFIG_DIR"
+    mkdir -p "$CONFIG_DIR"
+    chmod 700 "$CONFIG_DIR"
 
     echo -e "${BLUE}API Key Setup${NC}"
     echo -n "Enter your Grok API key (input hidden): "
@@ -305,9 +316,8 @@ setup_api_key() {
         exit 1
     fi
 
-    # Write the API key to the file using sudo
-    echo "$api_key" | sudo tee "$API_KEY_FILE" > /dev/null
-    sudo chmod 600 "$API_KEY_FILE"
+    echo "$api_key" > "$API_KEY_FILE"
+    chmod 600 "$API_KEY_FILE"
     echo -e "${GREEN}API key configured${NC}"
 }
 
@@ -329,8 +339,8 @@ case "$1" in
         echo -e "${RED}Uninstalling...${NC}"
         read -p "Confirm (y/n)? " confirm
         if [[ "$confirm" =~ ^[Yy]$ ]]; then
-            rm -f "$(command -v grok)"
-            rm -rf "$CONFIG_DIR" "$VENV_DIR" "$(dirname "$CONTEXT_FILE")"
+            rm -f "$HOME/.local/bin/grok"
+            rm -rf "$CONFIG_DIR" "$VENV_DIR" "$CONTEXT_DIR"
             echo -e "${GREEN}Uninstalled${NC}"
         else
             echo -e "${YELLOW}Cancelled${NC}"
@@ -400,10 +410,11 @@ setup_virtualenv() {
 main() {
     echo -e "${GREEN}Starting installation...${NC}"
     
-    [ "$(id -u)" -eq 0 ] || fail "Run as root (use sudo)"
-    
     install_system_deps
     command -v python3 >/dev/null || fail "Python 3 not found"
+    
+    # Ensure ~/.local/bin exists and is in PATH
+    ensure_local_bin_in_path
     
     safe_mkdir "$CONTEXT_DIR" 700
     setup_virtualenv
@@ -413,6 +424,8 @@ main() {
     echo -e "${GREEN}Installation complete!${NC}"
     echo -e "Run ${YELLOW}grok --setup${NC} to configure"
     echo -e "Then ${YELLOW}grok${NC} to start chatting"
+    echo -e "\nNote: If the 'grok' command is not found, you may need to restart your terminal"
+    echo -e "or run: ${YELLOW}export PATH=\"\$HOME/.local/bin:\$PATH\"${NC}"
 }
 
 # Pipe-to-bash handling with proper variable passing
